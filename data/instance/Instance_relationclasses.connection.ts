@@ -392,7 +392,8 @@ class Instance_relationclassesConnection implements CRUD {
         const points: string[] = res.rows[0]?.line_points ?? [];
 
         const uuids: UUID[] = [];
-        for (const point of points) {
+        for (let i = 1; i < points.length - 1; i++) {
+            const point = points[i];
             try {
                 const parsed = typeof point === "string" ? JSON.parse(point) : point;
                 const uuid = parsed?.UUID ?? parsed?.uuid;

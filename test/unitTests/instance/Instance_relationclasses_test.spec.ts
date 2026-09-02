@@ -355,10 +355,21 @@ describe("Instance relationclasses tests", function () {
             name: "test relationclass instance",
             uuid_role_instance_from: uuids.roleFromInstanceUuid2,
             uuid_role_instance_to: uuids.roleToInstanceUuid2,
+            // line_points as the modeling client persists them: the first and
+            // last points are the connected class instances, the ones between
+            // are the relation's bendpoints.
             line_points: [
+              {
+                UUID: uuids.classFromInstanceUuid2,
+                Point: { x: -5, y: 0, z: 0 },
+              },
               {
                 UUID: uuids.classBendpointInstanceUuid,
                 Point: { x: -3.3, y: 1.8, z: 0 },
+              },
+              {
+                UUID: uuids.classToInstanceUuid2,
+                Point: { x: 0, y: 0, z: 0 },
               },
             ],
             role_instance_from: {
@@ -391,6 +402,24 @@ describe("Instance relationclasses tests", function () {
       expect(res2.body).to.deep.include(uuids.roleFromInstanceUuid2);
       expect(res2.body).to.deep.include(uuids.roleToInstanceUuid2);
       expect(res2.body).to.deep.include(uuids.classBendpointInstanceUuid);
+      // The connected class instances (first/last line points) must survive the
+      // deletion of the relation that connects them.
+      expect(res2.body).to.not.deep.include(uuids.classFromInstanceUuid2);
+      expect(res2.body).to.not.deep.include(uuids.classToInstanceUuid2);
+
+      const resFrom = await server
+        .get(`/instances/classesInstances/${uuids.classFromInstanceUuid2}`)
+        .set("content-type", "application/json")
+        .set("accept", "application/json")
+        .set("Cookie", "authcookie=" + token);
+      expect(resFrom.status).to.equal(200);
+
+      const resTo = await server
+        .get(`/instances/classesInstances/${uuids.classToInstanceUuid2}`)
+        .set("content-type", "application/json")
+        .set("accept", "application/json")
+        .set("Cookie", "authcookie=" + token);
+      expect(resTo.status).to.equal(200);
     });
 
     it(`Should delete the relationclass and the role instance`, async () => {
