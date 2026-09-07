@@ -3,6 +3,7 @@
  */
 import {AttributeInstance} from "../../../../../mmar-global-data-structure";
 import {HTTP403Constrain} from "../../middleware/error_handling/standard_errors.middleware";
+import {logger} from "../../middleware/error_handling/error_handling.middleware";
 import {metaObjectExists} from "./Instance_commons.rules";
 import {PoolClient} from "pg";
 import {attribute_regex} from "./Metamodel_probe";
@@ -65,7 +66,28 @@ export async function regexExValidator(
     // The flags are the ones this rule was written with. Note that "m" makes the
     // anchors match per line, so a multi-line value satisfies a "^...$" regex as
     // long as one of its lines does; that is the existing rule, not a new one.
-    const sc = new RegExp(unwrapRegexLiteral(regexFromDb), "gmi");
+    //
+    // A pattern JavaScript cannot compile is not a constraint this engine can apply,
+    // so it is accepted rather than allowed to escape as a SyntaxError. It used to:
+    // one attribute type carrying, say, an inline-modifier group `(?i:true|false)` —
+    // valid in PCRE, Python and Java, not in JavaScript — turned every scene PATCH
+    // touching that attribute into an unhandled 500, with the metamodel error nowhere
+    // in the response. The modeling client's mirror of this rule already defers the
+    // same way (`attributeValueMatchesRegex` in metamodel-constraints.ts), so a
+    // throw here also meant the two disagreed about what is enforceable. Loud in the
+    // log, because it is a mistake in the metamodel that nothing else reports.
+    let sc: RegExp;
+    try {
+        sc = new RegExp(unwrapRegexLiteral(regexFromDb), "gmi");
+    } catch (err) {
+        logger.warn(
+            `Attribute type of attribute ${attributeToTest.uuid_attribute} carries a regex ` +
+            `JavaScript cannot compile, so no value can be checked against it: ` +
+            `${regexFromDb} (${err instanceof Error ? err.message : String(err)})`
+        );
+        return true;
+    }
+
     if (String(value).match(sc) !== null) {
         return true;
     }

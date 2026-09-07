@@ -45,6 +45,8 @@ describe("Instance validation rules", function () {
         wrappedAttributeTypeUuid: uuidv4(),
         slashAttributeUuid: uuidv4(),
         slashAttributeTypeUuid: uuidv4(),
+        uncompilableAttributeUuid: uuidv4(),
+        uncompilableAttributeTypeUuid: uuidv4(),
         sceneInstanceUuid: uuidv4(),
     };
 
@@ -150,6 +152,20 @@ describe("Instance validation rules", function () {
                                 },
                             },
                             {
+                                // A pattern from another regex dialect: the inline
+                                // modifier group `(?i:...)` is valid in PCRE, Python
+                                // and Java, and a SyntaxError in JavaScript.
+                                uuid: uuids.uncompilableAttributeUuid,
+                                name: "boolean_pcre",
+                                attribute_type: {
+                                    uuid: uuids.uncompilableAttributeTypeUuid,
+                                    name: "BooleanPcre",
+                                    pre_defined: true,
+                                    default_value: "not defined",
+                                    regex_value: "^(?i:true|false|yes|no|1|0|on|off)$",
+                                },
+                            },
+                            {
                                 // regex that kept only its leading slash
                                 uuid: uuids.slashAttributeUuid,
                                 name: "protocol_slash",
@@ -251,6 +267,30 @@ describe("Instance validation rules", function () {
                 expect(bad.status).to.equal(403);
                 expect(bad.body.error).to.contain("does not match the regex");
             });
+        });
+
+        // A regex JavaScript cannot compile is a mistake in the METAMODEL, and it
+        // used to escape `new RegExp` as a SyntaxError: the scene PATCH died as an
+        // unhandled 500 that named neither the attribute nor the pattern, and every
+        // model using that attribute type became unsavable. There is no constraint
+        // to apply, so the value is accepted — the same verdict the modeling
+        // client's mirror of this rule already reaches.
+        it("accepts any value when the attribute type's regex cannot be compiled", async function () {
+            const res = await patch(
+                scene_with({
+                    uuid_attribute: uuids.uncompilableAttributeUuid,
+                    value: "true",
+                })
+            );
+            expect(res.status).to.equal(200);
+
+            const other = await patch(
+                scene_with({
+                    uuid_attribute: uuids.uncompilableAttributeUuid,
+                    value: "anything at all",
+                })
+            );
+            expect(other.status).to.equal(200);
         });
     });
 
