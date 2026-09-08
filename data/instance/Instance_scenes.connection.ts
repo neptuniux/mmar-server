@@ -8,6 +8,7 @@ import Instance_port_connection from "./Instance_ports.connection";
 import Instance_attribute_connection from "./Instance_attributes.connection";
 import Instance_class_connection from "./Instance_classes.connection";
 import Instance_objects_connection from "./Instance_objects.connection";
+import {sort_class_instances_by_reference, verify_class_references} from "../services/instance_reference_order";
 import {BaseError, HTTP403NORIGHT} from "../services/middleware/error_handling/standard_errors.middleware";
 
 /**
@@ -202,9 +203,11 @@ class Instance_scenesConnection implements CRUD {
                     client,
                     newScene.get_port_instances()
                 ),
+                // Ordered for the same reason as in update(): an instance referenced by
+                // another must be written first, whatever order the payload lists them in.
                 await Instance_class_connection.postClassInstances(
                     client,
-                    newScene.get_class_instances(),
+                    sort_class_instances_by_reference(newScene.get_class_instances()),
                     created_instanceObject.get_uuid()
                 ),
                 await Instance_relationclass_connection.postRelationClassInstance(
@@ -268,6 +271,11 @@ class Instance_scenesConnection implements CRUD {
                 }
             }
 
+            // Checked before anything is written: a reference to a class instance that
+            // neither the payload nor the database holds reaches PostgreSQL as a bare
+            // constraint name, which says nothing about the model that has to be fixed.
+            await verify_class_references(client, newSceneInstance);
+
             const updated_obj = await Instance_objects_connection.update(
                 client,
                 sceneInstanceUuidToUpdate,
@@ -311,7 +319,10 @@ class Instance_scenesConnection implements CRUD {
                 );
             }
 
-            for (const classToCreate of classDifference.added) {
+            // Ordered, not taken as sent: a class instance is written together with its
+            // attributes, so a reference to another instance of the same batch has to
+            // point at a row that is already there. See instance_reference_order.
+            for (const classToCreate of sort_class_instances_by_reference(classDifference.added)) {
                 await Instance_class_connection.postClassInstances(
                     client,
                     classToCreate,
